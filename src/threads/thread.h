@@ -99,6 +99,7 @@ struct thread
 #endif
 		
 		struct semaphore *semaphore;
+		struct semaphore *sema_loading;
 		struct thread *parent;
 		struct list children;
 		struct list_elem siblings;

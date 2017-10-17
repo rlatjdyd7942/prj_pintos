@@ -32,23 +32,47 @@ process_execute (const char *file_name)
   char *fn_copy;
   tid_t tid;
 	struct list_elem *e;
+	char thread_name[16] = { 0, };
+	char *exec_name;
+	int i = 0;
+	void *temp;
 	
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
 
-	printf("\ntask : %s\n", file_name);
-	
+	while (file_name[i] != ' ' && file_name[i] != '\0') {
+		++i;
+	}
+	exec_name = malloc(sizeof(char) * ++i);
+	strlcpy(exec_name, file_name, i);
+	temp = filesys_open(exec_name);
+
+	if (temp == NULL) {
+		free (exec_name);
+		return TID_ERROR;
+	} else {
+		file_close(temp);
+	}
+	free (exec_name);
+
+
   fn_copy = palloc_get_page (0);
-  if (fn_copy == NULL)
+  if (fn_copy == NULL) {
     return TID_ERROR;
+	}
   strlcpy (fn_copy, file_name, PGSIZE);
+	
+	i = 0;
+	while (i < 15 && file_name[i] != ' ' && file_name[i] != '\0') {
+		thread_name[i] = file_name[i++];
+	}
+	thread_name[i] = '\0';
 
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
-  if (tid == TID_ERROR)
+  tid = thread_create (thread_name, PRI_DEFAULT, start_process, fn_copy);
+  if (tid == TID_ERROR) {
     palloc_free_page (fn_copy);
-
-	printf("tid : %d\n", tid);
+	}
 
   return tid;
 }
@@ -71,8 +95,10 @@ start_process (void *file_name_)
 
   /* If load failed, quit. */
   palloc_free_page (file_name);
-  if (!success) 
+  if (!success) { 
+		printf("load failed\n");
     thread_exit ();
+	}
 
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
@@ -102,11 +128,8 @@ process_wait (tid_t child_tid UNUSED)
 	struct semaphore *semaphore = NULL;
 	cur = thread_current();
 
-	printf("child tid : %d\n", child_tid);
-	
 	if (cur->status == THREAD_BLOCKED)
 		return -1;
-
 	for (e = list_begin(&cur->children);
 				e != list_end(&cur->children); e = list_next(e)) {
 		struct thread *t = list_entry (e, struct thread, siblings);
@@ -148,9 +171,13 @@ process_exit (void)
   uint32_t *pd;
 
 	cur->is_exited = true;
-	if (cur->semaphore != NULL) {
+	
+	if (cur->parent != NULL) {
 		cur->parent->exit_status = cur->exit_status;
 		list_remove(&cur->siblings);
+	}
+
+	if (cur->semaphore != NULL) {
 		sema_up(cur->semaphore);
 	}
   /* Destroy the current process's page directory and switch back
@@ -277,7 +304,7 @@ load (const char *args, void (**eip) (void), void **esp)
 
   int i;
 
-	void *temp_esp;
+	void *temp_esp, *for_dump;
 
   /* Allocate and activate page directory. */
   t->pagedir = pagedir_create ();
@@ -392,6 +419,7 @@ load (const char *args, void (**eip) (void), void **esp)
 	memset(*esp, 0, temp_esp - *esp);	// &argv[0]
 
 	*esp -= argc * sizeof(uint32_t);
+	for_dump = *esp;
 	strlcpy(temp_esp, file_name, strlen(file_name) + 1);
 	*(uint32_t*)(*esp) = temp_esp;
 	*esp += sizeof(uint32_t);
@@ -413,6 +441,7 @@ load (const char *args, void (**eip) (void), void **esp)
 	*esp -= sizeof(uint32_t);		//return addr
 	*(uint32_t*)(*esp) = 0;
 
+	//hex_dump(*esp, *esp, 0xc0000000 - (unsigned)*esp, true);
 
   /* Start address. */
   *eip = (void (*) (void)) ehdr.e_entry;

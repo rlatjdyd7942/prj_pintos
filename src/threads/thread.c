@@ -475,6 +475,7 @@ init_thread (struct thread *t, const char *name, int priority)
   t->priority = priority;
 
 	t->semaphore = NULL;
+	t->sema_loading = NULL;
 	t->parent = NULL;
 	list_init(&t->children);
 	t->siblings.prev = t->siblings.next = NULL;
